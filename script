@@ -1,0 +1,108 @@
+/**
+ * Telegram Bot → Google Sheets Integration
+ * -----------------------------------------
+ * This script receives messages from a Telegram bot and records purchase data into a Google Spreadsheet.
+ * Users can send a message in the following format:
+ *
+ *   card.food.12.5.lunch
+ * or
+ *   cash.transport.8.bus
+ *
+ * The bot automatically:
+ *   - Parses the message
+ *   - Validates the data format
+ *   - Saves it to a monthly sheet (based on current year-month)
+ *   - Responds with confirmation or an error message
+ *
+ * Commands:
+ *   del — delete all rows (except header) in the current month’s sheet
+ *
+ * Technologies:
+ *   - Google Apps Script
+ *   - Telegram Bot API
+ *   - Google Sheets API
+ *
+ * Author: [Your Name]
+ * GitHub: [Your GitHub Profile]
+ */
+
+const TELEGRAM_TOKEN = 'YOUR_TELEGRAM_TOKEN'; // Replace with your bot token
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const msgRaw = data.message?.text;
+    const firstName = data.message?.from?.first_name || "";
+    const lastName = data.message?.from?.last_name || "";
+    const chatId = data.message?.chat.id;
+
+    if (!msgRaw || !chatId) return;
+
+    const msg = msgRaw.trim().replace(/^\+/, "").toLowerCase();
+    const fullName = `${firstName} ${lastName}`.trim();
+    const date = new Date();
+    const sheetName = Utilities.formatDate(date, Session.getScriptTimeZone(), "yyyy-MM");
+
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = spreadsheet.getSheetByName(sheetName);
+
+    // Delete all rows except header
+    if (msg === "del") {
+      if (!sheet || sheet.getLastRow() < 2) {
+        sendMessage(chatId, "error");
+        return;
+      }
+      sheet.deleteRows(2, sheet.getLastRow() - 1);
+      sendMessage(chatId, "deleted");
+      return;
+    }
+
+    const parts = msg.split(".").map(part => part.trim());
+
+    // Validate message format
+    if (parts.length < 3 || parts.length > 4) {
+      sendMessage(chatId, "wrong format. use c or b.type.amount.description");
+      return;
+    }
+
+    const amount = parts[2].replace(",", ".");
+    if (!/^\d+(\.\d+)?$/.test(amount)) {
+      sendMessage(chatId, "wrong format. use c or b.type.amount.description");
+      return;
+    }
+
+    parts[2] = amount;
+    parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+
+    // Create sheet if it doesn't exist
+    if (!sheet) {
+      sheet = spreadsheet.insertSheet(sheetName);
+      sheet.appendRow(["Name", "Date", "Card or Cash", "Type", "Sum", "Comm"]);
+    }
+
+    const row = [fullName, date, ...parts];
+    sheet.appendRow(row);
+
+    sendMessage(chatId, "added");
+  } catch (err) {
+    Logger.log(err);
+    const chatId = e?.message?.chat?.id || JSON.parse(e.postData.contents)?.message?.chat?.id;
+    if (chatId) sendMessage(chatId, "error");
+  }
+}
+
+/**
+ * Sends a message to the Telegram chat.
+ */
+function sendMessage(chatId, text) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+  const payload = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({
+      chat_id: chatId,
+      text: text,
+    }),
+  };
+  UrlFetchApp.fetch(url, payload);
+}
