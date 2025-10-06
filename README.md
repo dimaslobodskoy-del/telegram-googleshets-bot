@@ -1,2 +1,15 @@
-# telegram-googleshets-bot
- This script receives messages from a Telegram bot and records purchase data into a Google Spreadsheet.
+# System files
+.DS_Store
+Thumbs.db
+
+# VS Code settings
+.vscode/
+
+# Google Apps Script files
+.clasp.json
+appsscript.json
+
+# Local or secret config files
+config.js
+secrets.txt
+.env
